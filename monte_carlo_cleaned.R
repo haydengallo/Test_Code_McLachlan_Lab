@@ -14,58 +14,78 @@ vary_met = 'True'
 num_mets = 10
 ### pick site either HF, NRP, Sylvania, Rooster, Goose
 site = "HF"
-numruns = 2
-nyear_user = 200
+numruns = 5
+nyear_user = 50
+
 
 if (site == 'HF'){
   site.alt = 'HARVARD'
 
-  input = 'Harvard.input.Rdata'
+  input = 'Start_Data/Harvard.input.Rdata'
   load(input)
 
-  input = 'Harvard_Met_Input.Rdata'
+  input = 'Start_Data/Harvard_Met_Input.Rdata'
   load(input)
 
 } else if (site == 'Goose'){
   site.alt = 'GOOSE'
 
-  input = 'Goose.linkages.input.Rdata'
+  input = 'Start_Data/Goose.linkages.input.Rdata'
   load(input)
 
-  input = 'Goose_Met_MPI.ESM.P_027.01.RData'
+  input = 'Start_Data/Goose_Met_MPI.ESM.P_027.01.RData'
   load(input)
 
 }  else if (site == 'Rooster'){
   site.alt = 'ROOSTER'
 
-  input = 'Rooster.linkages.input.Rdata'
+  input = 'Start_Data/Rooster.linkages.input.Rdata'
   load(input)
 
-  input = 'Rooster_met_data_MPI.ESM.P_032.01.Rdata'
+  input = 'Start_Data/Rooster_met_data_MPI.ESM.P_032.01.Rdata'
   load(input)
 
 } else if (site == 'Sylvania'){
   site.alt = 'SYLVANIA'
 
-  input = 'Sylvania.linkages.input.Rdata'
+  input = 'Start_Data/Sylvania.linkages.input.Rdata'
   load(input)
 
-  input = 'Sylvania_met_data_bcc.csm1.1_024.02.Rdata'
+  input = 'Start_Data/Sylvania_met_data_bcc.csm1.1_024.02.Rdata'
   load(input)
 
 } else if (site == 'NRP'){
   site.alt = site
 
-  input = 'NRP.linkages.input.Rdata'
+  input = 'Start_Data/NRP.linkages.input.Rdata'
   load(input)
 
-  input = 'NRP_met_data_bcc.csm1.1_032.01.Rdata'
+  input = 'Start_Data/NRP_met_data_bcc.csm1.1_032.01.Rdata'
   load(input)
 }
 
 if (vary_met == 'True'){
-met_runs <- read_csv(paste0('Met_updated/',site,'_met/weights/ensemble-weights-',site.alt,'-prism.csv'))
-met_runs_sample <- sample(met_runs$climate_model,num_mets)}
+
+  
+met_runs_wts <- read_csv(paste0('Met_updated/',site,'_met/weights/ensemble-weights-',site.alt,'-prism.csv'))
+#met_runs_sample <- sample(met_runs$climate_model,num_mets)
+
+# weighting code copied from workflow.spinup.R script which can be found on McLachlan Lab VM
+# load met ensemble weight files which contains model names, as well as weights and extract needed data
+clim_mods <- met_runs_wts$climate_model
+avg_wt <- met_runs_wts$wts
+
+# randomly select n models from list of climate models based on their weights
+clim_use <- sample(x = clim_mods, size = num_mets, prob = avg_wt, replace = T)
+
+# need to save wts so we can use it in SDA workflow 
+wts_use <- vector()
+for (i in 1:num_mets) wts_use[i] = avg_wt[which(clim_mods == clim_use[i])]
+
+# reweight so sum = 1 
+wts_use_1 = wts_use / sum(wts_use)
+}
+
 ### Parameters to be varied for each species ###
 
 red_oak_params <- data.frame('Spp_name' = c('red oak'), 'D_3_a' = c(249.392), 'D_3_b' = c(1185.544), 'MPLANT_a' = c(30), 'MPLANT_b' = c(50), 'DMAX_a' = c(6500), 'DMAX_b' = c(50), 'Frost_a' = c(-18), 'Frost_b' = c(2), "AGEMX_a" = c(301), 'AGEMX_b' = c(351), 'DMIN_a' = c(1100), 'DMIN_b' = c(50), 'G_a' = c(120), 'G_b' = c(20), 'SPRTND_a' = c(19), 'SPRTND_b' = c(1))
@@ -114,15 +134,15 @@ for (i in 1:nrow(individual_species_params)){G_samples[i,] <- rnorm(numruns, ind
 for (i in 1:nrow(individual_species_params)){SPRTND_samples[i,] <- rnorm(numruns, individual_species_params[i,16], individual_species_params[i,17])}
 
 # list of all parameters that are varied
-all_parameters <- list('D3', 'MPLANT', 'DMAX', 'Frost', 'AGEMX', 'DMIN', 'G', 'SPRTND')
+all_parameters <- list('D3', 'MPLANT', 'DMAX', 'FROST', 'AGEMX', 'DMIN', 'G', 'SPRTND')
 
 
 running_linkages <- function(spp.params, parameter, runnum, met){
 
   # create new run folder
   # choose correct new_dir based on whether or not you have chosen to vary met
-  if (vary_met == 'True'){new_dir = paste0('monte_carlo_sensitivity_analysis/efficiency_testing_updated_',site,'/species_update/',met,'/',parameter,'/',runnum)}
-  else{new_dir = paste0('monte_carlo_sensitivity_analysis/efficiency_testing_updated_',site,'/species_update/',parameter,'/',runnum)}
+  if (vary_met == 'True'){new_dir = paste0('monte_carlo_sensitivity_analysis/test_',site,'/',met,'/',parameter,'/',runnum)}
+  else{new_dir = paste0('monte_carlo_sensitivity_analysis/test_',site,'/',parameter,'/',runnum)}
   if (!dir.exists(new_dir)){
     dir.create(new_dir, recursive = T)
   }
@@ -138,10 +158,12 @@ running_linkages <- function(spp.params, parameter, runnum, met){
            outdir = new_dir)
 }
 
+baseline_spp.params <- spp.params
+
 monte_carlo_simulation <- function(parameter, numruns){
   start.time <<- Sys.time()
   count = 0
-  for (k in met_runs_sample){
+  for (k in clim_use){
     met = k
     input = paste0('Met_updated','/',site,'_met','/linkages/',met,'.Rdata')
     load(input)
@@ -154,21 +176,24 @@ monte_carlo_simulation <- function(parameter, numruns){
       parameter = l
       count = count + 1
       for (j in 1:numruns){
-        if (vary_met == 'True'){new_dir = paste0('monte_carlo_sensitivity_analysis/efficiency_testing_updated_',site,'/species_update/',met,'/',parameter)}
-        else{new_dir = paste0('monte_carlo_sensitivity_analysis/efficiency_testing_updated_',site,'/species_update/',parameter)}
+        if (vary_met == 'True'){new_dir = paste0('monte_carlo_sensitivity_analysis/test_',site,'/',met,'/',parameter)}
+        else{new_dir = paste0('monte_carlo_sensitivity_analysis/test_',site,'/',parameter)}
         if (!dir.exists(new_dir)){dir.create(new_dir, recursive = T)}
         temp_param <- get(paste0(all_parameters[count],'_samples'))
-        spp.params[,paste0(all_parameters[parameter])] <- temp_param[,j]
+        spp.params[,l] <- temp_param[,j]
         if (vary_met == 'True'){running_linkages(spp.params, parameter = parameter, runnum = j, met = met)}
         else {running_linkages(spp.params, parameter = parameter, runnum = j)}
+        spp.params <- baseline_spp.params
       }
       count = 0
     }
-    }
+  }
+  save(ens_wts = wts_use_1, file = paste0('./monte_carlo_sensitivity_analysis/test_',site,'/weights.Rdata'))
   end.time <<- Sys.time()
   }
 LAI_method = 'normal'
 monte_carlo_simulation(parameter = parameter, numruns = numruns)
 run_time = end.time - start.time
 run_time
+
 
