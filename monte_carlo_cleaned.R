@@ -1486,7 +1486,7 @@ legend('topright', legend = c('AGEMX', 'D3', 'DMAX', 'DMIN', 'Frost', 'G', 'MPLA
 
 plots.dir.path <- list.files(tempdir(), pattern="rs-graphics", full.names = TRUE);
 plots.png.paths <- list.files(plots.dir.path, pattern=".png", full.names = TRUE)
-dir = paste0('monte_carlo_sensitivity_analysis/test_',site,'/Plots)
+dir = paste0('monte_carlo_sensitivity_analysis/test_',site,'/Plots')
 file.copy(from=plots.png.paths, to=dir)
 
 }
